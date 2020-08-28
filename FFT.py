@@ -2,8 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy import trapz
 from scipy.integrate import solve_ivp
-from scipy.fft import fft 
-from scipy.fft import fftfreq 
+from scipy.fft import fft
+from scipy.fft import fftfreq
+from scipy.fft import fftshift, ifftshift
 # pop_vv_vec=[1,0]
 
 
@@ -29,7 +30,7 @@ pcc_after_pulse = 1  # excited state
 # ------------------ time scale -------------------
 ti = 0
 tf = 20E-12  # s
-N = 5000
+N = 500
 tev = np.linspace(ti, tf, N)
 # ---- constants and parameters of the system -----
 hbar = 6.582119569E-16  # eV*s
@@ -45,7 +46,7 @@ pop_vv_i = 1
 
 # -------- parameters of optical pulse -------------
 Amp = 1
-t0 = 10E-12  # seconds
+t0 = 3E-12  # seconds
 pulse_width = 1000E-16  # seconds
 # pulse_width=(pulse_width_fs)*(10**-15)
 om = E_lvl_spacing / hbar  # Hz
@@ -77,42 +78,62 @@ def f1(t, p, E_lvl_spacing, ihbar, trans_dipole_mom, dephase_E, t0, om, Amp, pul
 sol = solve_ivp(f, (ti, tf), [p0], t_eval=tev, first_step=tf/N,
                 args=(E_lvl_spacing, ihbar, trans_dipole_mom, dephase_E, t0, om, Amp, pulse_width))
 
-t = sol.t
-p = sol.y
-norm = np.max(np.abs(p[0]))
+t = np.squeeze(sol.t)
+p = np.squeeze(sol.y)
+pump_signal = e_pulse(t, t0, om, Amp, pulse_width)
+norm = np.max(np.abs(p))
 
-tf=fft(t)
-freq=fftfreq(N)
+omegas = np.linspace(-0.01, 0.01, 500) - 1.0
+pf = np.zeros(omegas.shape, dtype=np.complex)
+ef = np.zeros(omegas.shape, dtype=np.complex)
 
-pf=fft(p)
-Ef=fft(e_pulse(t, t0, om, Amp, pulse_width))
+for j, item in enumerate(omegas):
+    omega = item / hbar
+    print(omega*t)
+    pf[j] = np.trapz(p * np.exp(1j*omega*t), x=t)
+    ef[j] = np.trapz(pump_signal * np.exp(1j*omega*t), x=t)
 
-mask= freq > 0
-
-X=pf/Ef
-aw= abs((pi*om/nb*c)*np.real(X))
-aw_norm=np.max(np.abs(aw[0]))
-
-aw_true=2*abs(aw/N)
-
-#numerical integration of EM pulse
-
-Exp=np.exp(-2*pi*1j*t*om)
-func=Exp*e_pulse(t, t0, om, Amp, pulse_width)
-integration=np.trapz(t,func)
-#plt.plot(t/1e-12, e_pulse(t, t0, om, Amp, pulse_width))
-
-
-#plt.plot(t/1e-12, Ef)
-
-
-plt.plot(freq, aw[0]/aw_norm)
-#plt.plot(t/1e-12, np.real(pf[0])/norm)
-#plt.plot(t/1e-12, np.imag(pf[0])/norm)
-#plt.legend(['EM pump pulse', 'Polarization, real part', 'Polarization, imaginary part'])
-#plt.xlabel("Time (ps)")
-
-plt.xlabel("Frequency")
-plt.ylabel("absorption")
-#plt.ylabel("Polarization (a.u.)")
+plt.plot(omegas, -np.imag(pf/ef))
 plt.show()
+
+plt.plot(omegas, -np.real(pf/ef))
+plt.show()
+
+# pf = ifftshift(fft(fftshift(p)))
+# Ef = ifftshift(fft(fftshift(pump_signal)))
+# X = pf / Ef
+#
+# freq = fftshift(fftfreq(len(p), t[3] - t[2]))
+#
+# plt.plot(freq*6.05e-34/1.6e-19, np.abs(X))
+# plt.show()
+#
+# mask= freq > 0
+#
+#
+# aw= abs((pi*om/nb*c)*np.real(X))
+# aw_norm=np.max(np.abs(aw[0]))
+#
+# aw_true=2*abs(aw/N)
+#
+# #numerical integration of EM pulse
+# 
+# Exp=np.exp(-2*pi*1j*t*om)
+# func=Exp*e_pulse(t, t0, om, Amp, pulse_width)
+# integration=np.trapz(t,func)
+# #plt.plot(t/1e-12, e_pulse(t, t0, om, Amp, pulse_width))
+# 
+# 
+# #plt.plot(t/1e-12, Ef)
+# 
+# 
+# plt.plot(freq, aw[0]/aw_norm)
+# #plt.plot(t/1e-12, np.real(pf[0])/norm)
+# #plt.plot(t/1e-12, np.imag(pf[0])/norm)
+# #plt.legend(['EM pump pulse', 'Polarization, real part', 'Polarization, imaginary part'])
+# #plt.xlabel("Time (ps)")
+# 
+# plt.xlabel("Frequency")
+# plt.ylabel("absorption")
+# #plt.ylabel("Polarization (a.u.)")
+# plt.show()
