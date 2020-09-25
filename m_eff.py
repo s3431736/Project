@@ -1,12 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy import trapz
 from scipy.integrate import solve_ivp
-from scipy.fft import fft
-from scipy.fft import fftfreq
-from scipy.fft import fftshift, ifftshift
-# pop_vv_vec=[1,0]
-
 
 # dim=2
 d_matrix = np.zeros((2, 2))
@@ -28,40 +22,43 @@ pvv_after_pulse = 0
 pcc_after_pulse = 1  # excited state
 
 # -------- parameters of Gallium Arsenide -------------
-bg_GaAs=1.424
-meff_el=0.067
-meff_holes=0.48
+
+bg_GaAs = 1.424
+meff_el = 0.067
+meff_holes = 0.48
 
 # ------------------ time scale -------------------
+
 ti = 0
 tf = 20E-12  # s
 N = 400
-tev = np.linspace(ti, tf, N,  endpoint = False )
+tev = np.linspace(ti, tf, N, endpoint=False)
+
 # ---- constants and parameters of the system -----
+
+hhbar = 1.0545718e-34   # J*s
 hbar = 6.582119569E-16  # eV*s
 ihbar = 1j * hbar
-e_mass=9.10938356E-31
-eff_mass=e_mass*0.067
-eff_mass_h=e_mass*0.48
-nb=1.424
-c=3E8
-pi= 3.141592653589793
-q=1.6e-19
-  # eV
-wavevectors=np.linspace(0, 0.2, 100)*1E9
-hhbar = 1.0545718e-34
-E_lvl_spacing = hhbar*wavevectors**2 / (2*eff_mass) * hhbar / q + 1
-E_cb = nb+hhbar**2*wavevectors**2 / (2*eff_mass) 
-E_vb=-hhbar**2*wavevectors**2 / 2*eff_mass_h
-#E_lvl_spacing=E_cb-E_vb
-E_lvl_spacing=hhbar**2*wavevectors**2 / 2*eff_mass
 
-trans_dipole_mom = np.zeros(wavevectors.shape)+1E-3
-dephase_E = 1E-3/5  # eV
+e_mass = 9.10938356E-31
+meff_el *= e_mass
+meff_holes *= e_mass
+nb = 1.424
+c = 3E8
+pi = 3.141592653589793
+q = 1.6e-19
+# eV
+wavevectors = np.linspace(0, 0.2, 100) * 1E9
+
+E_cb = bg_GaAs * q + hhbar ** 2 * wavevectors ** 2 / (2 * meff_el)
+E_vb = -hhbar ** 2 * wavevectors ** 2 / (2 * meff_holes)
+E_lvl_spacing = (E_cb - E_vb) / q
+# E_lvl_spacing=hhbar**2*wavevectors**2 / 2*eff_mass
+
+trans_dipole_mom = np.zeros(wavevectors.shape) + 1E-3
+dephase_E = 1E-3 / 5  # eV
 pop_cc_ = 0
 pop_vv_i = 1
-
-
 
 # -------- parameters of optical pulse -------------
 Amp = 1
@@ -89,13 +86,13 @@ def f(t, p, E_lvl_spacing, ihbar, trans_dipole_mom, dephase_E, t0, omm, Amp, pul
 # RHS of the equation (version 2)
 def f1(t, p, E_lvl_spacing, ihbar, trans_dipole_mom, dephase_E, t0, omm, Amp, pulse_width):
     dp = np.diag((1 / ihbar) * (-1j * dephase_E - E_lvl_spacing + om[0] * hbar)) @ p - \
-         (1 / ihbar) * trans_dipole_mom * e_pulse(t, t0, omm*0, Amp, pulse_width)
+         (1 / ihbar) * trans_dipole_mom * e_pulse(t, t0, omm * 0, Amp, pulse_width)
     return dp
 
-# --------------------- solver ---------------------
-sol = solve_ivp(f1, (ti, tf), p0, t_eval=tev, first_step=tf/N, dense_output=True,
-                args=(E_lvl_spacing, ihbar, trans_dipole_mom, dephase_E, t0, om[0], Amp, pulse_width))
 
+# --------------------- solver ---------------------
+sol = solve_ivp(f1, (ti, tf), p0, t_eval=tev, first_step=tf / N, dense_output=True,
+                args=(E_lvl_spacing, ihbar, trans_dipole_mom, dephase_E, t0, om[0], Amp, pulse_width))
 
 t = sol.t
 p = sol.y
@@ -103,7 +100,7 @@ p = sol.y
 plt.contourf(np.real(p))
 plt.show()
 
-pump_signal = e_pulse(t, t0, 0*om[0], Amp, pulse_width)
+pump_signal = e_pulse(t, t0, 0 * om[0], Amp, pulse_width)
 norm = np.max(np.abs(p))
 
 omegas = np.linspace(-0.01, 0.01, 500) + 1.0 * 0
@@ -112,15 +109,14 @@ eef = np.zeros((len(omegas),), dtype=np.complex)
 
 for j, item in enumerate(omegas):
     omega = item / hbar
-    print(omega*t)
-    pf[j, :] = np.trapz(p * np.exp(-1j*omega*t), x=t, axis=1)
-    ef = np.trapz(pump_signal * np.exp(-1j*omega*t), x=t)
+    print(omega * t)
+    pf[j, :] = np.trapz(p * np.exp(-1j * omega * t), x=t, axis=1)
+    ef = np.trapz(pump_signal * np.exp(-1j * omega * t), x=t)
     pf[j, :] = pf[j, :] / ef
     eef[j] = ef
 
-#1D
-pf = 2*np.sum(pf, axis=1)
-
+# 1D
+pf = 2 * np.sum(pf, axis=1)
 
 plt.plot(omegas, np.imag(pf))
 
@@ -128,7 +124,7 @@ plt.ylabel("absorption")
 plt.xlabel("Frequency")
 plt.show()
 
-plt.plot(omegas, np.real(pf)+1)
+plt.plot(omegas, np.real(pf) + 1)
 plt.ylabel("Polarization")
 plt.xlabel("Frequency")
 plt.show()
