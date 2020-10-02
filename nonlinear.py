@@ -1,6 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.integrate import solve_ivp
+from linear import linear
+
+import matplotlib
+matplotlib.rcParams.update({'font.size': 14})
 
 # dim=2
 d_matrix = np.zeros((2, 2))
@@ -41,7 +45,7 @@ kb = 1.380649e-23
 
 relax_time = 1e-11
 
-hhbar = 1.0545718e-34   # J*s
+hhbar = 1.0545718e-34  # J*s
 hbar = 6.582119569E-16  # eV*s
 ihbar = 1j * hbar
 
@@ -60,15 +64,15 @@ E_vb = -hhbar ** 2 * wavevectors ** 2 / (2 * meff_holes)
 E_lvl_spacing = (E_cb - E_vb) / q
 # E_lvl_spacing=hhbar**2*wavevectors**2 / 2*eff_mass
 
-trans_dipole_mom = np.zeros(wavevectors.shape) + 1E-3
+trans_dipole_mom = np.zeros(wavevectors.shape) + 1e-11
 dephase_E = 1E-3 / 5  # eV
 pop_cc = 0
 pop_vv_i = 1
 
 # -------- parameters of optical pulse -------------
-Amp = 3
+Amp = np.sqrt(1e9) * 10000   # number in the parenthesis is in W/cm^2
 t0 = 5E-12  # seconds
-pulse_width = 1000E-16  # seconds
+pulse_width = 0.1E-12  # seconds
 # pulse_width=(pulse_width_fs)*(10**-15)
 om = E_lvl_spacing / hbar  # Hz
 
@@ -76,10 +80,11 @@ om = E_lvl_spacing / hbar  # Hz
 Ef = 0.5 * bg_GaAs * q
 
 p0 = np.zeros(wavevectors.shape, dtype=np.complex)
-pop_cb = 1.0/(1.0+np.exp((E_cb - Ef)/(kb*Tempr)))
-pop_vb = 1 - 1.0/(1.0+np.exp(-(E_vb - Ef)/(kb*Tempr)))
+pop_cb = 1.0 / (1.0 + np.exp((E_cb - Ef) / (kb * Tempr)))
+pop_vb = 1 - 1.0 / (1.0 + np.exp(-(E_vb - Ef) / (kb * Tempr)))
 
 p0 = np.hstack([p0, pop_cb, pop_vb])
+
 
 # function computing the EM pulse
 def e_pulse(t, t0, omm, Amp, pulse_width):
@@ -98,16 +103,16 @@ def f1(t, p, E_lvl_spacing, ihbar, trans_dipole_mom, dephase_E, t0, omm, Amp, pu
     len_ar = p.shape[0] // 3
 
     pol = p[:len_ar]
-    ne = p[len_ar:2*len_ar]
+    ne = p[len_ar:2 * len_ar]
     nh = p[2 * len_ar: 3 * len_ar]
 
     dp = np.diag((1 / ihbar) * (-1j * dephase_E - E_lvl_spacing + om[0] * hbar)) @ pol + \
-         (1 / ihbar) * (ne-nh) * trans_dipole_mom * e_pulse(t, t0, omm * 0, Amp, pulse_width)
+         (1 / ihbar) * (ne - nh) * trans_dipole_mom * e_pulse(t, t0, omm * 0, Amp, pulse_width)
 
-    dh = (2.0 / hbar) * np.imag(trans_dipole_mom * e_pulse(t, t0, omm * 0, Amp, pulse_width) * np.conj(pol)) -\
-         (nh-pop_vb) / relax_time
-    de = -(2.0 / hbar) * np.imag(trans_dipole_mom * e_pulse(t, t0, omm * 0, Amp, pulse_width) * np.conj(pol)) -\
-         (ne-pop_cb) / relax_time
+    dh = (2.0 / hbar) * np.imag(trans_dipole_mom * e_pulse(t, t0, omm * 0, Amp, pulse_width) * np.conj(pol)) - \
+         (nh - pop_vb) / relax_time
+    de = -(2.0 / hbar) * np.imag(trans_dipole_mom * e_pulse(t, t0, omm * 0, Amp, pulse_width) * np.conj(pol)) - \
+         (ne - pop_cb) / relax_time
 
     return np.hstack([dp, de, dh])
 
@@ -121,8 +126,8 @@ ans = sol.y
 len_ar = ans.shape[0] // 3
 
 p = ans[:len_ar, :]
-ne = ans[len_ar:2*len_ar, :]
-nh = ans[2*len_ar:3*len_ar, :]
+ne = ans[len_ar:2 * len_ar, :]
+nh = ans[2 * len_ar:3 * len_ar, :]
 
 plt.contourf(np.real(p))
 plt.show()
@@ -133,8 +138,8 @@ plt.show()
 plt.contourf(nh)
 plt.show()
 
-plt.plot(ne[0,:])
-plt.plot(nh[0,:])
+plt.plot(ne[0, :])
+plt.plot(nh[0, :])
 plt.show()
 
 pump_signal = e_pulse(t, t0, 0 * om[0], Amp, pulse_width)
@@ -144,32 +149,103 @@ omegas = np.linspace(-0.01, 0.01, 500) + 1.0 * 0
 pf = np.zeros((len(omegas), len(wavevectors)), dtype=np.complex)
 eef = np.zeros((len(omegas),), dtype=np.complex)
 
+dim = 3
+
 for j, item in enumerate(omegas):
     omega = item / hbar
     print(omega * t)
     pf[j, :] = np.trapz(p * np.exp(-1j * omega * t), x=t, axis=1)
     ef = np.trapz(pump_signal * np.exp(-1j * omega * t), x=t)
-    pf[j, :] = pf[j, :] / ef
+    if dim == 3:  # 3D
+        pf[j, :] = (4 * np.pi * wavevectors ** 2) * pf[j, :] * trans_dipole_mom / ef
+    elif dim == 2:  # 2D
+        pf[j, :] = (2 * np.pi * wavevectors) * pf[j, :] * trans_dipole_mom / ef
+    else:  # 1D
+        pf[j, :] = 2 * pf[j, :] * trans_dipole_mom / ef
     eef[j] = ef
 
 # 1D
 pf = 2 * np.sum(pf, axis=1)
+pf = pf * (omegas+bg_GaAs) * q / hhbar / c / 3
 
-plt.plot(omegas, np.imag(pf))
-
-plt.ylabel("absorption")
-plt.xlabel("Frequency")
-plt.show()
-
-plt.plot(omegas, np.real(pf) + 1)
-plt.ylabel("Polarization")
-plt.xlabel("Frequency")
-plt.show()
+# plt.plot(omegas, np.imag(pf))
+#
+# plt.ylabel("absorption")
+# plt.xlabel("Frequency")
+# plt.show()
+#
+# plt.plot(omegas, np.real(pf) + 1)
+# plt.ylabel("Polarization")
+# plt.xlabel("Frequency")
+# plt.show()
 
 plt.plot(omegas, eef)
 
 plt.ylabel("EM Pulse")
 plt.xlabel("Frequency")
+plt.show()
+
+absorption = []
+ne = ne[:, ::10]
+nh = nh[:, ::10]
+t = t[::10]
+
+for j, item in enumerate(t):
+    print("Probe pulse time {}".format(item))
+    ans = linear(ti=0,
+                 tf=20E-12,
+                 N=400,
+                 bg=bg_GaAs,
+                 meff_el=0.067,
+                 meff_holes=0.48,
+                 dip_moment=trans_dipole_mom,
+                 dephase_E=0.5E-3,
+                 Amp=np.sqrt(1e3) * 10000,
+                 t0=5E-12,
+                 pulse_width=1000E-16,
+                 dim=3,
+                 ne=ne[:, j],
+                 nh=nh[:, j])
+
+    absorption.append(ans)
+
+absorption = np.array(absorption)
+plt.contourf(omegas*1e3, t/1e-12, absorption/1e6, 30)
+plt.ylabel("Time (ps)")
+plt.xlabel("Energy E-Eg (meV)")
+bar = plt.colorbar()
+bar.set_label(r"Absorption $x10^6$ (m$^-1$)")
+plt.show()
+
+# from mpl_toolkits.mplot3d import axes3d
+# import matplotlib.pyplot as plt
+#
+# X, Y = np.meshgrid(omegas, t)
+#
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
+# # ax.plot_wireframe(omegas, t, absorption, rstride=10, cstride=10)
+# ax.plot_wireframe(X, Y, absorption, rstride=10, cstride=10)
+# plt.show()
+
+from mpl_toolkits.mplot3d import axes3d
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
+X, Y = np.meshgrid(omegas, t)
+
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+ax.plot_surface(X, Y, absorption, alpha=0.3)
+cset = ax.contourf(X, Y, absorption, zdir='z', offset=1.5*np.min(absorption))
+cset = ax.plot_wireframe(X, Y, absorption, rstride=5, cstride=10)
+cset = ax.contourf(X, Y, absorption, zdir='x', offset=-np.min(X))
+cset = ax.contourf(X, Y, absorption, zdir='y', offset=np.max(Y))
+
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+
 plt.show()
 
 # pf = ifftshift(fft(fftshift(p)))
